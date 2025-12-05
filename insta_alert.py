@@ -50,24 +50,31 @@ def send_sms(message):
 
 
 def get_last_post_shortcode():
-    """Récupère le shortcode du dernier post Instagram."""
+    """Récupère le shortcode du dernier post Instagram (méthode fiable 2025)."""
+
+    url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=disneylandpassdlp"
+
     headers = {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://www.instagram.com/disneylandpassdlp/"
     }
 
-    response = requests.get(INSTAGRAM_URL, headers=headers)
-    
+    response = requests.get(url, headers=headers)
+
     if response.status_code != 200:
-        print("Erreur de récupération Instagram :", response.text)
+        print("Erreur HTTP Instagram :", response.status_code)
         return None
 
-    data = response.json()
-
     try:
-        shortcode = data["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["node"]["shortcode"]
+        data = response.json()
+        shortcode = data["data"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["node"]["shortcode"]
         return shortcode
-    except KeyError:
-        print("Erreur : structure JSON inattendue.")
+
+    except Exception as e:
+        print("Erreur parsing JSON :", e)
+        print("Contenu reçu :", response.text[:300])
         return None
 
 
