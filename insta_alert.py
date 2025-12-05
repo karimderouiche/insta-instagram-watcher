@@ -1,138 +1,105 @@
 import requests
-import json
 import re
+import json
 import os
 import smtplib
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# -----------------------------
-# CONFIGURATION EMAIL OUTLOOK
-# -----------------------------
 OUTLOOK_EMAIL = os.getenv("OUTLOOK_EMAIL")
 OUTLOOK_PASSWORD = os.getenv("OUTLOOK_PASSWORD")
 EMAIL_TO = os.getenv("EMAIL_TO")
 
-# -----------------------------
-# CONFIGURATION FREE MOBILE SMS
-# -----------------------------
 FREE_USER = os.getenv("FREE_USER")
 FREE_KEY = os.getenv("FREE_KEY")
 
-# -----------------------------
-# INSTAGRAM ACCOUNT
-# -----------------------------
-INSTAGRAM_URL = "https://www.instagram.com/disneylandpassdlp/?__a=1&__d=dis"
-LAST_POST_FILE = "last_post.json"
+LAST_FILE = "last_post.json"
 
 
-def send_email(subject, message):
-    """Envoie un email via Outlook SMTP."""
-    msg = MIMEMultipart()
+def send_email(subject, body):
+    msg = MIMEText(body)
+    msg["Subject"] = subject
     msg["From"] = OUTLOOK_EMAIL
     msg["To"] = EMAIL_TO
-    msg["Subject"] = subject
 
-    msg.attach(MIMEText(message, "plain"))
-
-    with smtplib.SMTP("smtp.office365.com", 587) as server:
-        server.starttls()
-        server.login(OUTLOOK_EMAIL, OUTLOOK_PASSWORD)
-        server.send_message(msg)
+    server = smtplib.SMTP("smtp.office365.com", 587)
+    server.starttls()
+    server.login(OUTLOOK_EMAIL, OUTLOOK_PASSWORD)
+    server.send_message(msg)
+    server.quit()
 
 
 def send_sms(message):
-    """Envoie un SMS via l'API Free Mobile."""
     url = f"https://smsapi.free-mobile.fr/sendmsg?user={FREE_USER}&pass={FREE_KEY}&msg={message}"
     requests.get(url)
 
 
-def get_last_post_shortcode():
-    """Méthode finale : API mobile Instagram (fonctionne sur serveurs cloud)."""
+def load_last_image():
+    if not os.path.exists(LAST_FILE):
+        return None
+    with open(LAST_FILE, "r") as f:
+        return json.load(f).get("image_url")
 
-    url = "https://i.instagram.com/api/v1/users/web_profile_info/?username=disneylandpassdlp"
 
+def save_last_image(url):
+    with open(LAST_FILE, "w") as f:
+        json.dump({"image_url": url}, f)
+
+
+def get_latest_image_url():
+    """Scrape Instagram HTML pour extraire la première URL CDN d'image du profil."""
+    url = "https://www.instagram.com/disneylandpassdlp/"
     headers = {
-        "User-Agent": "Instagram 273.0.0.16.70 Android",
-        "X-IG-App-ID": "936619743392459",  # ID officiel de l'app Instagram Android
-        "Accept": "*/*"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept-Language": "fr-FR,fr;q=0.9",
     }
 
-    response = requests.get(url, headers=headers)
+    r = requests.get(url, headers=headers)
 
-    if response.status_code != 200:
-        print("Erreur HTTP Instagram :", response.status_code)
-        print("Réponse brute :", response.text[:200])
+    if r.status_code != 200:
+        print("Erreur HTTP :", r.status_code)
         return None
 
-    try:
-        data = response.json()
-        shortcode = data["data"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["node"]["shortcode"]
-        return shortcode
+    # Regex capturant toutes les URLs pointant vers le CDN Instagram
+    images = re.findall(r'https://[^"]+\.cdninstagram\.com[^"]+', r.text)
 
-    except Exception as e:
-        print("Erreur parsing JSON :", e)
-        print("Contenu reçu :", response.text[:300])
+    if not images:
+        print("Aucune image trouvée dans le HTML.")
         return None
 
-
-def load_last_saved_shortcode():
-    """Charge le dernier post sauvegardé."""
-    if not os.path.exists(LAST_POST_FILE):
-        return None
-    
-    with open(LAST_POST_FILE, "r") as f:
-        return json.load(f).get("shortcode")
-
-
-def save_shortcode(shortcode):
-    """Sauvegarde le dernier shortcode."""
-    with open(LAST_POST_FILE, "w") as f:
-        json.dump({"shortcode": shortcode}, f)
+    # La première image = la plus récente
+    return images[0]
 
 
 def main():
-    print("➡️ Vérification du dernier post Instagram…")
+    print("➡️ Vérification du dernier post via CDN…")
 
-    latest_shortcode = get_last_post_shortcode()
-    if not latest_shortcode:
-        print("Impossible de récupérer le dernier post.")
+    latest_image = get_latest_image_url()
+    if not latest_image:
+        print("Impossible de récupérer la dernière image.")
         return
 
-    last_saved = load_last_saved_shortcode()
+    last_saved = load_last_image()
 
-    if last_saved == latest_shortcode:
-        print("Aucun nouveau post 📭")
+    if last_saved == latest_image:
+        print("Aucun nouveau post.")
         return
 
-    # Nouveau post !
-    print("🔥 Nouveau post détecté !")
+    print("🔥 NOUVEAU POST DÉTECTÉ !")
 
-    post_url = f"https://www.instagram.com/p/{latest_shortcode}/"
+    profile_link = "https://www.instagram.com/disneylandpassdlp/"
 
-    # EMAIL
-    try:
-        send_email(
-            "🚨 Nouveau post Instagram !",
-            f"@disneylandpassdlp a publié un nouveau post !\n\nLien : {post_url}"
-        )
-        print("📩 Email envoyé !")
-    except Exception as e:
-        print("Erreur envoi email :", e)
+    send_email(
+        "🚨 Nouveau post Instagram !",
+        f"Un nouveau post a été détecté !\n\nImage CDN : {latest_image}\nProfil : {profile_link}",
+    )
 
-    # SMS
-    try:
-        send_sms(f"Nouveau post IG ! {post_url}")
-        print("📱 SMS envoyé !")
-    except:
-        print("Erreur envoi SMS.")
+    send_sms(f"Nouveau post IG ! {profile_link}")
 
-    # Sauvegarde du shortcode
-    save_shortcode(latest_shortcode)
-    print("💾 Shortcode sauvegardé.")
+    save_last_image(latest_image)
+    print("✔ Alerte envoyée et nouvelle image sauvegardée.")
 
 
 if __name__ == "__main__":
