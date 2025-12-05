@@ -51,35 +51,31 @@ def send_sms(message):
 
 
 def get_last_post_shortcode():
-    """Scrape le HTML pour récupérer le dernier post (méthode la plus robuste)."""
+    """Méthode finale : API mobile Instagram (fonctionne sur serveurs cloud)."""
 
-    url = "https://www.instagram.com/disneylandpassdlp/"
+    url = "https://i.instagram.com/api/v1/users/web_profile_info/?username=disneylandpassdlp"
+
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept-Language": "fr-FR,fr;q=0.9"
+        "User-Agent": "Instagram 273.0.0.16.70 Android",
+        "X-IG-App-ID": "936619743392459",  # ID officiel de l'app Instagram Android
+        "Accept": "*/*"
     }
 
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
         print("Erreur HTTP Instagram :", response.status_code)
-        return None
-
-    # On cherche le JSON embarqué dans le HTML
-    match = re.search(r"window\._sharedData = (.*?);</script>", response.text)
-    if not match:
-        print("Impossible de trouver le JSON _sharedData.")
+        print("Réponse brute :", response.text[:200])
         return None
 
     try:
-        data = json.loads(match.group(1))
-        
-        user = data["entry_data"]["ProfilePage"][0]["graphql"]["user"]
-        last_post = user["edge_owner_to_timeline_media"]["edges"][0]["node"]
-        return last_post["shortcode"]
+        data = response.json()
+        shortcode = data["data"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["node"]["shortcode"]
+        return shortcode
 
     except Exception as e:
         print("Erreur parsing JSON :", e)
+        print("Contenu reçu :", response.text[:300])
         return None
 
 
