@@ -2,7 +2,7 @@ name: Instagram Watcher
 
 on:
   schedule:
-    - cron: "*/5 * * * *"    # toutes les 5 minutes
+    - cron: "*/120 * * * *"    # toutes les 5 minutes
   workflow_dispatch:         # pour tester manuellement
 
 jobs:
