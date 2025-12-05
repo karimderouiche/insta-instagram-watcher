@@ -1,5 +1,6 @@
 import requests
 import json
+import re
 import os
 import smtplib
 from email.mime.text import MIMEText
@@ -50,15 +51,12 @@ def send_sms(message):
 
 
 def get_last_post_shortcode():
-    """Récupère le shortcode du dernier post Instagram (méthode fiable 2025)."""
+    """Scrape le HTML pour récupérer le dernier post (méthode la plus robuste)."""
 
-    url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=disneylandpassdlp"
-
+    url = "https://www.instagram.com/disneylandpassdlp/"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://www.instagram.com/disneylandpassdlp/"
+        "Accept-Language": "fr-FR,fr;q=0.9"
     }
 
     response = requests.get(url, headers=headers)
@@ -67,14 +65,21 @@ def get_last_post_shortcode():
         print("Erreur HTTP Instagram :", response.status_code)
         return None
 
+    # On cherche le JSON embarqué dans le HTML
+    match = re.search(r"window\._sharedData = (.*?);</script>", response.text)
+    if not match:
+        print("Impossible de trouver le JSON _sharedData.")
+        return None
+
     try:
-        data = response.json()
-        shortcode = data["data"]["user"]["edge_owner_to_timeline_media"]["edges"][0]["node"]["shortcode"]
-        return shortcode
+        data = json.loads(match.group(1))
+        
+        user = data["entry_data"]["ProfilePage"][0]["graphql"]["user"]
+        last_post = user["edge_owner_to_timeline_media"]["edges"][0]["node"]
+        return last_post["shortcode"]
 
     except Exception as e:
         print("Erreur parsing JSON :", e)
-        print("Contenu reçu :", response.text[:300])
         return None
 
 
